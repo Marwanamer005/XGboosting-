@@ -1,0 +1,9 @@
+# virtual environment
+.venv/
+
+# Python / Jupyter cache
+__pycache__/
+.ipynb_checkpoints/
+
+# dataset (65 MB) - download it from https://opendata.cern.ch/record/328
+*.csv.gz
