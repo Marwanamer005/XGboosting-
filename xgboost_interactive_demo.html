@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>XGBoost Step by Step</title>
+<style>
+  :root { --bg:#E5E4E2; --card:#EFEEEC; --dark:#262A33; --muted:#6B6F78; --accent:#B5543A; --line:#B9B9B6; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--dark); font-family:"Segoe UI", Arial, sans-serif; }
+  main { max-width:1100px; margin:0 auto; padding:28px 24px 40px; }
+  h1 { font-family:"Bahnschrift Light","Segoe UI Light",Arial,sans-serif; font-weight:300; font-size:46px; letter-spacing:1px; margin:0; text-transform:uppercase; }
+  .tag { color:var(--muted); font-size:17px; margin:6px 0 20px; }
+  .controls { display:flex; flex-wrap:wrap; gap:16px; align-items:center; margin-bottom:12px; font-size:16px; }
+  button { font:inherit; background:transparent; color:var(--dark); border:1px solid var(--dark); border-radius:8px; padding:8px 16px; cursor:pointer; }
+  button.primary { background:var(--dark); color:var(--bg); }
+  button:disabled { opacity:.35; cursor:default; }
+  label { display:flex; gap:8px; align-items:center; }
+  .chip { color:var(--muted); }
+  svg { width:100%; height:auto; display:block; }
+  .legend { color:var(--muted); font-size:14px; margin:4px 0 16px; }
+  .sw { display:inline-block; width:12px; height:12px; border-radius:50%; vertical-align:middle; margin:0 6px 0 14px; }
+  .sw.bar { border-radius:2px; height:6px; }
+  table { width:100%; border-collapse:collapse; font-size:15px; }
+  td, th { padding:6px 8px; border-bottom:1px solid var(--line); text-align:right; font-weight:400; }
+  th { color:var(--muted); }
+  .leaves { display:flex; gap:16px; flex-wrap:wrap; margin:16px 0; }
+  .leaf { flex:1; min-width:260px; border:1px solid var(--dark); border-radius:12px; padding:12px 16px; line-height:1.75; font-size:15px; }
+  .big { font-size:18px; }
+  b.acc { color:var(--accent); font-weight:600; }
+  .note { color:var(--muted); font-size:14px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>XGBoost, step by step</h1>
+  <div class="tag">Four houses, one feature (size). Each click adds one tree that learns from the errors of the previous prediction.</div>
+
+  <div class="controls">
+    <button id="bk">Back</button>
+    <button id="nx" class="primary">Add next tree</button>
+    <span id="rl" class="chip"></span>
+    <label>λ (lambda) <input type="range" id="lam" min="0" max="5" step="0.5" value="1"> <span id="lv"></span></label>
+    <label>η (learning rate) <input type="range" id="eta" min="0.1" max="1" step="0.1" value="0.5"> <span id="ev"></span></label>
+  </div>
+
+  <svg id="ch" viewBox="0 0 680 270" role="img" aria-label="Predictions vs true prices"></svg>
+  <div class="legend"><span class="sw" style="background:#B5543A;margin-left:0"></span>true price ($100k)<span class="sw bar" style="background:#262A33"></span>prediction<span class="sw bar" style="background:#8A8D94"></span>error</div>
+  <div id="cp"></div>
+  <p class="note">Formulas used: g = ŷ − y (gradient), h = 1 (hessian of squared error), leaf value w = −G / (H + λ), new prediction = old + η · w.</p>
+</main>
+<script>
+const Y=[1.0,1.4,3.0,3.4],N=["A","B","C","D"],S=[70,85,140,160],XS=[130,250,430,550],LV=[[0,1],[2,3]],MAX=10;
+let r=0;
+const $=id=>document.getElementById(id);
+const f=v=>(v>=0?"+":"−")+Math.abs(v).toFixed(2);
+const f2=v=>(v<0?"−":"")+Math.abs(v).toFixed(2);
+const rm=p=>Math.sqrt(p.reduce((s,v,i)=>s+(v-Y[i])**2,0)/4);
+const py=v=>220-v*45;
+function run(lam,eta){const h=[[2.2,2.2,2.2,2.2]],inf=[null];for(let t=1;t<=MAX;t++){const p=h[t-1];const L=LV.map(ix=>{const G=ix.reduce((s,i)=>s+(p[i]-Y[i]),0),H=ix.length,w=-G/(H+lam);return{ix,G,H,w,st:eta*w}});h.push(p.map((v,i)=>v+(i<2?L[0].st:L[1].st)));inf.push(L)}return{h,inf}}
+function txt(x,y,s,o){return `<text x="${x}" y="${y}" font-size="${o&&o.size||12}" fill="${o&&o.fill||"#262A33"}" text-anchor="${o&&o.anchor||"start"}" font-family="Segoe UI, Arial">${s}</text>`}
+function draw(){
+  const lam=+$("lam").value,eta=+$("eta").value;$("lv").textContent=lam;$("ev").textContent=eta;
+  const R=run(lam,eta),p=R.h[r];
+  let s='<line x1="340" y1="34" x2="340" y2="222" stroke="#8A8D94" stroke-dasharray="4 4"/>';
+  s+=txt(190,22,"Leaf 1: size &lt; 100 m²",{anchor:"middle",fill:"#6B6F78"})+txt(490,22,"Leaf 2: size ≥ 100 m²",{anchor:"middle",fill:"#6B6F78"});
+  s+='<line x1="60" y1="220" x2="620" y2="220" stroke="#8A8D94" stroke-width="0.6"/>';
+  for(let i=0;i<4;i++){const x=XS[i];
+    s+=`<line x1="${x}" y1="${py(p[i])}" x2="${x}" y2="${py(Y[i])}" stroke="#8A8D94" stroke-width="1.5" stroke-dasharray="3 3"/>`;
+    s+=`<line x1="${x-30}" y1="${py(p[i])}" x2="${x+30}" y2="${py(p[i])}" stroke="#262A33" stroke-width="5" stroke-linecap="round"/>`;
+    s+=`<circle cx="${x}" cy="${py(Y[i])}" r="7" fill="#B5543A"/>`;
+    s+=txt(x+38,py(p[i])+4,p[i].toFixed(2));
+    s+=txt(x,242,"House "+N[i],{anchor:"middle",size:14})+txt(x,260,S[i]+" m², y = "+Y[i].toFixed(1),{anchor:"middle",fill:"#6B6F78"});}
+  $("ch").innerHTML=s;
+  $("rl").textContent=r===0?"Round 0: no trees yet":"Trees added: "+r;$("bk").disabled=r===0;$("nx").disabled=r===MAX;
+  if(r===0){$("cp").innerHTML=`<div class="leaf big">Start: every house gets the same guess, the average price <b>2.2</b>. Error (RMSE) = <b class="acc">${rm(p).toFixed(3)}</b>. Click <b>Add next tree</b>.</div>`;return}
+  const q=R.h[r-1],L=R.inf[r];
+  let t='<table><tr><th style="text-align:left">House</th><th>true y</th><th>previous ŷ</th><th>g = ŷ − y</th><th>h</th></tr>';
+  for(let i=0;i<4;i++)t+=`<tr><td style="text-align:left">${N[i]}</td><td>${Y[i].toFixed(2)}</td><td>${q[i].toFixed(2)}</td><td>${f(q[i]-Y[i])}</td><td>1</td></tr>`;
+  t+="</table>";
+  let c='<div class="leaves">';
+  L.forEach((l,k)=>{const a=l.ix.map(i=>f2(q[i]-Y[i])).join(" + ");
+    c+=`<div class="leaf"><b>Leaf ${k+1}</b> (houses ${l.ix.map(i=>N[i]).join(", ")})<br>G = ${a} = ${f2(l.G)}<br>H = 1 + 1 = ${l.H}<br>w = −G/(H+λ) = −(${f2(l.G)})/(${l.H}+${lam}) = <b>${f2(l.w)}</b><br>change = η·w = ${eta} × ${f2(l.w)} = <b class="acc">${f(l.st)}</b></div>`});
+  c+=`</div><div class="big">Error (RMSE): ${rm(q).toFixed(3)} → <b class="acc">${rm(p).toFixed(3)}</b></div>`;
+  $("cp").innerHTML=`<div class="note" style="margin-bottom:6px">Tree ${r} is built from the errors of the previous prediction:</div>`+t+c;
+}
+$("nx").onclick=()=>{if(r<MAX){r++;draw()}};
+$("bk").onclick=()=>{if(r>0){r--;draw()}};
+$("lam").oninput=draw;$("eta").oninput=draw;
+document.addEventListener("keydown",e=>{if(e.key==="ArrowRight"||e.key===" "){$("nx").click();e.preventDefault()}if(e.key==="ArrowLeft"){$("bk").click()}});
+draw();
+</script>
+</body>
+</html>
